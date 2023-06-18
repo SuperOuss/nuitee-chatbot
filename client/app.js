@@ -6,6 +6,8 @@ const chatContainer = document.querySelector('#chat-container');
 
 let loadInterval;
 
+app.use('/.well-known', express.static(path.join(__dirname, '.well-known')));
+
 //# FUNCTIONS
 
 // to show "..." while loading message from bot
