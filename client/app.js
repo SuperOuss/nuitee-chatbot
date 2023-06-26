@@ -6,8 +6,6 @@ const chatContainer = document.querySelector('#chat-container');
 
 let loadInterval;
 
-app.use('/.well-known', express.static(path.join(__dirname, '.well-known')));
-
 //# FUNCTIONS
 
 // to show "..." while loading message from bot
@@ -87,6 +85,7 @@ const handleSubmit = async (e) => {
   loader(botMessageContainer);
 
   // get bot's response from server
+
   const response = await fetch('http://localhost:8080/', {
     method: 'POST',
     headers: {
