@@ -21,9 +21,6 @@ const apiKey = process.env.API_NINJA_KEY;
 // Create an instance of express
 const app = express();
 
-//import nuitee API
-//const sdk = api('@nuitee-lite-api/v1.0.5#oa30lhz0i0g3');
-
 // Add middleware
 app.use(express.json());
 app.use(cors());
@@ -55,15 +52,14 @@ app.post('/', async (req, res) => {
 
     const message = `${prompt} ${historyString}`;
 
-    //Build user data profile
+    //Get the city
     if (
       userData.city === null &&
       userData.country === null &&
       userData.checkin === null &&
       userData.checkout === null &&
       userData.hotelIds === null
-    )
-     {
+    ) {
       var response = await openai.createChatCompletion({
         model: 'gpt-3.5-turbo-0613',
         messages: [
@@ -100,7 +96,7 @@ app.post('/', async (req, res) => {
         presence_penalty: 0,
       });
 
-    //Get booking prices for the specific user profile
+      //Get booking prices for the specific user profile
 
     }
     else {
@@ -173,6 +169,7 @@ app.post('/', async (req, res) => {
       }
 
 
+
       // Call the function
       countryCode = await getCountryCodeAndUpdate(args, apiKey, cityName);
       if (function_name === 'get_hotel_list') {
@@ -192,56 +189,69 @@ app.post('/', async (req, res) => {
         // Add the hotelData to userData
         //userData.hotelData = hotelData;
         userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        console.log(hotelData);
-
-        // Call OpenAI API again to format the function result
-        response = await openai.createChatCompletion({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: `You are a helpful travel assistant. Here are the hotels available in the city specified by the user: ${JSON.stringify(hotelData)}. Please provide a summarized version to the user. Also, please ask follow up questions about checkin and checkout dates` },
-            { role: 'user', content: `Provide me with a summary of the available hotels. Be concise if possible and ask me about my checkin and checkout dates` }
-          ],
-          temperature: 0.5,
-          max_tokens: 3000,
-          top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0,
+         /*
+        response = await openai.createEmbedding({
+          input: "this is just a test",
+          model: 'text-embedding-ada-002' // e.g., 'gpt-3.5-turbo'
         });
-      }
+        console.log(response);
+     
+      const jsonTextData = hotelData;
+      console.log(jsonTextData);
+      const embeddings = await generateEmbeddings("any text will do for this test");
+      console.log(embeddings);
+      */
 
-
-      if (function_name === 'get_booking_price') {
-        const function_response = await get_booking_price(userData.hotelIds, checkin, checkout);
-        if (checkin) userData.checkin = checkin;
-        if (checkout) userData.checkout = checkout;
-
-        // Add the priceData to userData
-        hotelData.priceData = function_response.data;
-        console.log(function_response.data);
-        console.log(hotelData);
-        // Call OpenAI API again to format the function result
-        response = await openai.createChatCompletion({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: `You are a helpful travel assistant. Here are the booking prices for the selected hotels and dates: ${JSON.stringify(function_response)}. Please provide a summarized version to the user and match the names of the hotels with the ids from se the hotel names from ${JSON.stringify(hotelData)}` },
-            { role: 'user', content: `Provide me with a correctly formatted summary of the booking prices with the names of the hotels, and ask me follow up questions about which hotel I want to book` }
-          ],
-          temperature: 0.5,
-          max_tokens: 3000,
-          top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0,
-        });
-      }
+      // Call OpenAI API again to format the function result
+      response = await openai.createChatCompletion({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: `You are a helpful travel assistant. Here are the hotels available in the city specified by the user: ${JSON.stringify(hotelData)}. Please provide a summarized version to the user. Also, please ask follow up questions about checkin and checkout dates` },
+          { role: 'user', content: `Provide me with a summary of the available hotels. Be concise if possible and ask me about my checkin and checkout dates` }
+        ],
+        temperature: 0.5,
+        //max_tokens: 3000,
+        top_p: 1,
+        frequency_penalty: 0.5,
+        presence_penalty: 0,
+      });
     }
 
-    res.status(200).send({
-      message: response.data.choices[0].message.content
-    });
-  } catch (error) {
-    res.status(500).send(error || 'Something went wrong');
-    console.log(error);
+    if (function_name === 'get_booking_price') {
+      if (checkin) userData.checkin = checkin;
+      if (checkout) userData.checkout = checkout;
+      console.log(userData);
+      const function_response = await get_booking_price(userData.hotelIds, checkin, checkout);
+  
+      
+
+      // Add the priceData to userData
+      hotelData.priceData = function_response.data;
+      console.log(function_response.data);
+      console.log(hotelData);
+      // Call OpenAI API again to format the function result
+      response = await openai.createChatCompletion({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: `You are a helpful travel assistant. Here are the booking prices for the selected hotels and dates: ${JSON.stringify(function_response)}. Please provide a summarized version to the user and match the names of the hotels with the ids from se the hotel names from ${JSON.stringify(hotelData)}` },
+          { role: 'user', content: `Provide me with a correctly formatted summary of the booking prices with the names of the hotels, and ask me follow up questions about which hotel I want to book` }
+        ],
+        temperature: 0.5,
+        //max_tokens: 3000,
+        top_p: 1,
+        frequency_penalty: 0.5,
+        presence_penalty: 0,
+      });
+    }
   }
+
+    res.status(200).send({
+    message: response.data.choices[0].message.content
+  });
+} catch (error) {
+  res.status(500).send(error || 'Something went wrong');
+  console.log(error);
+}
 });
 // Start the server
 app.listen(process.env.PORT, () => {

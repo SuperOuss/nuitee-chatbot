@@ -5,7 +5,8 @@ import axios from 'axios';
 dotenv.config();
 
 //import nuitee API
-const sdk = api('@nuitee-lite-api/v2.0#4cc803elj7dqbpi');
+//const sdk = api('@nuitee-lite-api/v2.0#4cc803elj7dqbpi');
+const sdk = api('@nuitee-lite-api/v1.0.5#oa30lhz0i0g3');
 
 
 
@@ -13,7 +14,7 @@ const sdk = api('@nuitee-lite-api/v2.0#4cc803elj7dqbpi');
 export function get_hotel_list(countryCode, cityName) {
   return new Promise((resolve, reject) => {
     sdk.auth('sand_65ec9c89-27c0-451c-b2f2-881aefd1d9fd');
-    sdk.getDataHotels({ countryCode: countryCode, cityName: cityName, limit: '1' })
+    sdk.getDataHotels({ countryCode: countryCode, cityName: cityName, limit: '2' })
       .then(({ data }) => {
         resolve(data);
       })
@@ -26,7 +27,7 @@ export function get_hotel_list(countryCode, cityName) {
 export function get_booking_price(hotelIds, checkin, checkout) {
   return new Promise((resolve, reject) => {
     sdk.auth('sand_65ec9c89-27c0-451c-b2f2-881aefd1d9fd');
-    sdk.getHotelsRates({
+    sdk.getHotels({
       hotelIds: hotelIds,
       checkin: checkin,
       checkout: checkout,
