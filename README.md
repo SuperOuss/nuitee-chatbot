@@ -1,16 +1,20 @@
 # Nuitee hotel booking chatbot
 
-This AI-powered chat bot is built with OpenAI's API and uses HTML, CSS, and Javascript for the frontend and a Node & Express server for the backend to provide a conversational interface for users. It is designed to understand natural language and respond in a meaningful way. It takes user input, parses them and returns an object that can be reused with Nuitee API to fetch a list of hotels. 
+PoC bot to book hotel in a conversation with the user. This first version validates the technical feasability of the concept. 
 
-It's a very early alpha that'll superseded by the plugin system.
+It's powered by [Nuitee liteAPI](https://www.liteapi.travel/)
 
-## Live Preview
+It includes the following features: 
 
+- Getting a list of hotels from Nuitee liteapi 
+- Getting rates from Nuitee liteapi
 
-## Key Components
+The chatbot parses the city and country code from the information the user inputs, then parses the checkin and checkout dates.
 
-- HTML, CSS, and Vanilla Javascript
-- Node.js and Express.js
-- DOM Manipulation
-- OpenAI API
-- HTTP Requests (GET and POST) and Response
+# How to run
+
+Have NodeJS installed, install all project dependencies.
+
+- Using a terminal, browse to the client folder and run `npm run dev` 
+- Open a second terminal window, browse to the server folder and run `npm run server`
+- Open `localhost:5173`
