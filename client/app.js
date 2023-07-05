@@ -112,6 +112,12 @@ const handleSubmit = async (e) => {
 };
 
 //# EVENT LISTENERS
+window.addEventListener('beforeunload', function (event) {
+  fetch('http://localhost:8080/clear-session/', {
+    method: 'POST',
+  });
+});
+
 form.addEventListener('submit', handleSubmit);
 form.addEventListener('keyup', (e) => {
   if (e.keyCode === 13) {
