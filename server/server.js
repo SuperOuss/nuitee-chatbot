@@ -34,15 +34,13 @@ if (!userData) {
   userData = {
     city: null,
     country: null,
+    hotelStars: null,
+    hotelServices: null,
     checkin: null,
     checkout: null,
     hotelIds: null,
   };
 }
-
-
-
-
 app.post('/clear-session', (req, res) => {
   userData = {
     city: null,
@@ -73,32 +71,26 @@ app.post('/', async (req, res) => {
 
     const historyString = history.map(item => `User: ${item.prompt}\nAssistant: ${item.response}\n`).join("\n");
 
-    const message = `${prompt} ${historyString}`;
+    //const message = `${prompt} ${historyString}`;
 
-    //Assess user state
+    //Gather data
 
     var response = await openai.createChatCompletion({
       model: 'gpt-3.5-turbo-0613',
       messages: [
-        { role: "system", content: `You must act as a helpful travel agent. Extract any useful data from ${message} and select a state from the function get_user_data. Data to look for : City name, hotels names, dates` },
-        { role: "system", content: `Please check ${JSON.stringify(userData)} for previously collected data` },
-        { role: "user", content: `${message}` }
+        { role: "system", content: `You must act as a data parser. Extract any useful data from ${prompt} and assign to the correct parameter in the function get_user_data. Data to look for : City name, dates, hotel stars, hotel services. If no relevant data is found, Answer the user as a helpful travel assistant` },
+        { role: "user", content: `${prompt}` }
       ],
       functions: [
         {
           name: 'get_user_data',
-          description: 'Extract data from the user to help him book a hotel with the travel agent. Any date should be formatted in YYYY-MM-DD format.',
+          description: 'Extract data from the user and parse it according to the properties. Any date should be formatted in YYYY-MM-DD format.',
           parameters: {
             type: 'object',
             properties: {
-              userState: {
-                type: "string",
-                enum: ["noData", "citySelected", "hotelStarsSelected", "hotelServicesSelected", "datesEntered"],
-                description: "noData means that no data was in the user message, citySelected means that the user selected a city, hotelStarsSelected means the user selected how many stars he wants for the hotel, hotelServicesSelected means the user has specified some of the services he wants in the hotel, datesEntered means the user has provided a checkin and checkout date"
-              },
               cityName: {
                 type: 'string',
-                description: 'The user will provide a city name. Please infer the country code from the city name'
+                description: 'The user will provide a city name. Please correct it to the closest match if it has a spelling mistake'
               },
               hotelStars: {
                 type: 'string',
@@ -120,8 +112,8 @@ app.post('/', async (req, res) => {
                 description: 'checkout date, provided by the user. The format should be : YYYY-MM-DD'
               },
             },
-            required: ['userState'],
           },
+          required: ['dataFound']
         }
       ],
       function_call: 'auto',
@@ -134,45 +126,39 @@ app.post('/', async (req, res) => {
 
     history[history.length - 1].response = response.data.choices[0].message.content;  //Append conversation to chat history - Building context
 
-    // Check if function was called
+    // Check  if function was called
     let messageContent = response.data.choices[0].message;
+    console.log(messageContent);
     if (messageContent.hasOwnProperty('function_call')) {
       const function_name = messageContent.function_call.name;
       console.log(function_name);
       //check for data
       const args = JSON.parse(messageContent.function_call.arguments);
-      userState = args.userState;
-      let cityName, checkin, checkout, hotelStars, countryCode, hotelServices;
-      //checking and assigning data
+      let cityName, checkin, checkout, hotelStars, countryCode, hotelServices, starsFilterApplied, pricingFetched, servicesFilterApplied, hotelDataFetched, numElements;
+      console.log(args);
       if (args.cityName) cityName = args.cityName;
       if (args.hotelStars) hotelStars = args.hotelStars;
       if (args.checkin) checkin = args.checkin;
       if (args.checkout) checkout = args.checkout;
       if (args.hotelStars) hotelStars = args.hotelStars;
       if (args.hotelServices) hotelServices = args.hotelServices;
-      console.log(hotelServices);
+      if (cityName) userData.city = cityName;
+      if (hotelStars) userData.hotelStars = hotelStars;
+      if (hotelServices) userData.hotelServices = hotelServices;
+      if (checkin) userData.checkin = checkin;
+      if (checkout) userData.checkout = checkout;
       //Get country code if cityname is available
-      if (cityName && countryCode == null) {
+      console.log("parsing data and executing API requests")
+      //Execute functions to gather data
+      //Gather hotel data
+      if (cityName && !hotelDataFetched) {
+        console.log("get countryCode");
         const data = await get_country_code(cityName, apiKey);
         countryCode = data[0].country;
-      }
-      if (userState === 'noData') {
-        response = await openai.createChatCompletion({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: `You are a helpful travel assistant. The user hasn't provided any city to travel to.` },
-            { role: 'user', content: `Ask me which city I want to travel to` }
-          ],
-          temperature: 0.5,
-          //max_tokens: 3000,
-          top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0,
-        });
-      }
-      else if (userState === 'citySelected') {
+        userData.country = countryCode;
         const function_responsePromise = get_hotel_list(countryCode, cityName);
         const function_response = await function_responsePromise;
+        console.log("hotelData fetched");
         hotelData = function_response.data.map(item => {
           const tags = extract_tags(item.hotelDescription);
           return {
@@ -182,71 +168,39 @@ app.post('/', async (req, res) => {
             stars: item.stars
           }
         })
-        if (cityName) userData.city = cityName;
-        if (countryCode) userData.country = countryCode;
-        console.log(hotelData);
-        response = await openai.createChatCompletion({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: `You are a helpful travel assistant. Here's the data on all the hotels ${JSON.stringify(hotelData)}. Please help the user define criteria for the hotels he's looking for. Number of stars and specific tags from the hotel description apply` },
-            { role: 'user', content: `Ask me questions until we shortlist 3 hotels` }
-          ],
-          temperature: 0.5,
-          //max_tokens: 3000,
-          top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0,
-        });
-      }
-      else if (userState === 'hotelStarsSelected') {
+        userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
+        hotelDataFetched = true;
+        numElements = hotelData.length;
+        console.log(`HotelData filled. Number of elements: ${numElements}`);
+      };
+      if (hotelStars && hotelData && !starsFilterApplied) {
         console.log(hotelStars);
         hotelStars = Number(hotelStars);
         hotelData = hotelData.filter(hotel => hotel.stars === hotelStars);
-        const numElements = Object.keys(hotelData).length;
-        console.log(`Number of elements: ${numElements}`);
-        response = await openai.createChatCompletion({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: `You are a helpful travel assistant. Here's the filtered hotel Data by stars ${JSON.stringify(hotelData)}. Please help the user define criteria for the hotels he's looking for. Ask for specific tags from the hotel description apply` },
-            { role: 'user', content: `Ask me if I have any specific services in mind for the hotel I wish to be in` }
-          ],
-          temperature: 0.5,
-          //max_tokens: 3000,
-          top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0,
-        });
+        userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
+        numElements = hotelData.length;
+        starsFilterApplied = true;
+        console.log(`HotelData filtered by stars. Number of elements: ${numElements}`);
       }
-      else if (userState === 'hotelServicesSelected') {
+      if (hotelServices && hotelData && !servicesFilterApplied) {
         hotelData = await filter_by_tags(hotelData, hotelServices);
         userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        const numElements = Object.keys(hotelData).length;
-        console.log(`Number of elements: ${numElements}`);
-        console.log(hotelData);
-        response = await openai.createChatCompletion({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: `You are a helpful travel assistant. Here's the filtered hotel Data by stars and services ${JSON.stringify(hotelData)}. Please the user complete his booking by asking for his checkin and checkout dates` },
-            { role: 'user', content: `Tell me how many hotels are available in ${JSON.stringify(hotelData)} then Ask me for my checkin and checkout dates` }
-          ],
-          temperature: 0.5,
-          //max_tokens: 3000,
-          top_p: 1,
-          frequency_penalty: 0.5,
-          presence_penalty: 0,
-        });
+        numElements = Object.keys(hotelData).length;
+        servicesFilterApplied = true;
+        console.log(`hotelData filtered by services. Number of elements: ${numElements}`);
       }
-      else if (userState === 'datesEntered') {
-        if (checkin) userData.checkin = checkin;
-        if (checkout) userData.checkout = checkout;
+      if (hotelData && userData.hotelIds && checkin && checkout && !pricingFetched && numElements <= 50) {
         const function_response = await get_booking_price(userData.hotelIds, checkin, checkout);
         hotelData.priceData = function_response.data;
-        console.log(hotelData);
+        pricingFetched = true;
+        console.log("Pricing fetched")
+      }
+      if (numElements <= 50) {
         response = await openai.createChatCompletion({
           model: 'gpt-3.5-turbo',
           messages: [
-            { role: 'system', content: `You are a helpful travel assistant. Here are the booking prices for the selected hotels and dates: ${JSON.stringify(function_response)}. Please provide a summarized version to the user and match the names of the hotels with the ids from se the hotel names from ${JSON.stringify(hotelData)}` },
-            { role: 'user', content: `Provide me with a correctly formatted summary of the booking prices with the names of the hotels, and ask me follow up questions about which hotel I want to book` }
+            { role: 'system', content: `You are a helpful travel assistant. Your goal is to help the user book a hotel. The information about the user stay are in  ${JSON.stringify(userData)} and the current hotel and pricing information is in ${JSON.stringify(hotelData)} Please display hotel data in a table in an ordered manner. ` },
+            { role: 'user', content: `As a travel assistant, help me plan my future travels. Use ${historyString} for our conversation history and use ${JSON.stringify(userData)} to keep track of my current travel information and ask me for missing data in a natural manner (except for hotelIds as it's filled automatically. Always follow up with a question about missing data in natural manner` },
           ],
           temperature: 0.5,
           //max_tokens: 3000,
@@ -255,10 +209,28 @@ app.post('/', async (req, res) => {
           presence_penalty: 0,
         });
       }
+      if (numElements >= 50) {
+        response = await openai.createChatCompletion({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: `You are a helpful travel assistant. Your goal is to help the user book a hotel. The information about the user stay are in  ${JSON.stringify(userData)} and there's no filtered hotel data. Please ask the user to refine his hotel search by asking for number of stars and services. ` },
+            { role: 'user', content: `As a travel assistant, help me plan my future travels. Use ${historyString} for our conversation history and ${JSON.stringify(userData)} and use ${JSON.stringify(userData)} to ask me for missing data in a natural manner (except for hotelIds as it's filled automatically. Always follow up with a question about missing data in natural manner` },
+          ],
+          temperature: 0.5,
+          //max_tokens: 3000,
+          top_p: 1,
+          frequency_penalty: 0.5,
+          presence_penalty: 0,
+        });
+      }
+      if (hotelData) console.log(Object.keys(hotelData).length);
+      if (starsFilterApplied) console.log(`Stars filter applied: ${starsFilterApplied}`);
+      if (servicesFilterApplied) console.log(`Services filter applied: ${servicesFilterApplied}`);
+      if (pricingFetched) console.log(`Pricing fetched: ${pricingFetched}`);
+      if (hotelDataFetched) console.log(`Hotel Data Fetched: ${hotelDataFetched}`);
     }
     console.log(userData);
-    console.log(userState);
-
+    console.log(response.data.choices[0].message);
     res.status(200).send({
       message: response.data.choices[0].message.content
     });
@@ -275,6 +247,7 @@ app.post('/', async (req, res) => {
       console.error('Something happened in setting up the request and triggered an Error:', error.message);
     }
   }
+
 });
 // Start the server
 app.listen(process.env.PORT, () => {
