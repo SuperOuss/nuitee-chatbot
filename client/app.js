@@ -86,7 +86,7 @@ const handleSubmit = async (e) => {
 
   // get bot's response from server
 
-  const response = await fetch('http://localhost:8080/', {
+  const response = await fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com:8080', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
