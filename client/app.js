@@ -124,3 +124,39 @@ form.addEventListener('keyup', (e) => {
     handleSubmit(e);
   }
 });
+
+//Get logs 
+
+// Function to fetch and display console logs
+const fetchConsoleLogs = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/console-logs');
+    if (response.ok) {
+      const logs = await response.json();
+
+      // Clear previous logs
+      const consoleContainer = document.getElementById('console-container');
+      consoleContainer.innerHTML = '';
+
+      // Display new logs
+      logs.forEach((log) => {
+        const logElement = document.createElement('p');
+        logElement.textContent = log;
+        consoleContainer.appendChild(logElement);
+      });
+
+      // Scroll to the bottom of the console container
+      consoleContainer.scrollTop = consoleContainer.scrollHeight;
+    } else {
+      console.log('Error fetching console logs:', response.statusText);
+    }
+  } catch (error) {
+    console.log('Error fetching console logs:', error);
+  }
+};
+
+// Call the fetchConsoleLogs function to initially load logs
+fetchConsoleLogs();
+
+// Update console logs every X seconds (e.g., every 5 seconds)
+setInterval(fetchConsoleLogs, 5000);

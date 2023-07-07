@@ -195,3 +195,24 @@ form img {
   width: 30px;
   height: 30px;
 }
+#content-area {
+  display: flex;
+  flex-direction: column-reverse; 
+  align-items: flex-end; 
+  justify-content: flex-end; /* add this line */
+  width: 100%; /* take the full width of the parent */
+  height: 100%; /* take the full height of the parent */
+}
+
+#console-container {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-top: 20px;
+  overflow-y: scroll;
+  max-height: 200px;
+  width: 800px;
+  margin-left: auto; /* Center the element horizontally */
+  margin-right: auto; /* Center the element horizontally */
+  background-color: black;
+  color: white;
+}

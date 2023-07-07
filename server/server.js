@@ -3,9 +3,8 @@ import express, { json } from 'express';
 import cors from 'cors';
 import { Configuration, OpenAIApi } from 'openai';
 import session from 'express-session';
+import cookieParser from 'cookie-parser';
 import { get_hotel_list, get_booking_price, get_country_code, extract_tags, filter_by_tags } from './functions.js';
-
-
 
 dotenv.config();
 
@@ -28,25 +27,71 @@ app.use(cors());
 let userData;
 const history = [];
 
+//console logs route
+
+// Array to store console logs
+const consoleLogs = [];
+
+// Flag to keep track of whether console.log has been overridden
+let consoleLogOverridden = false;
+
+// Middleware to log console output
+const consoleLogMiddleware = (req, res, next) => {
+  // Only modify console.log if it has not been overridden before
+  if (!consoleLogOverridden) {
+    const originalConsoleLog = console.log;
+
+    console.log = (...args) => {
+      const log = args.map((arg) => JSON.stringify(arg)).join(' ');
+      consoleLogs.push(log);
+      originalConsoleLog.apply(console, args);
+    };
+
+    // Set the flag indicating that console.log has been overridden
+    consoleLogOverridden = true;
+  }
+
+  next();
+};
+
+
+// Middleware to allow cross-origin requests
+const allowCrossOriginMiddleware = (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+};
+
+app.use(consoleLogMiddleware);
+app.use(allowCrossOriginMiddleware);
+
+// Route to get console logs
+app.get('/console-logs', (req, res) => {
+  res.json(consoleLogs);
+});
+
+
+
+
+
 //Session creation
-if (!userData) {
-  userData = {
-    city: null,
-    country: null,
-    hotelStars: null,
-    hotelServices: null,
-    checkin: null,
-    checkout: null,
-    hotelIds: null,
-  };
-}
+app.use(cookieParser());
+app.use(session({
+  secret: '88K10g8flw1y7KcrN6KnXkxKflNekxjf',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: true, maxAge: 60000 }
+}));
 app.post('/clear-session', (req, res) => {
   userData = {
     city: null,
     country: null,
     checkin: null,
     checkout: null,
-    hotelIds: null
+    hotelIds: null,
+    hotelStars: null,
+    hotelServices:null
+
   };
   console.log('userData reset');
   res.send();
@@ -151,7 +196,6 @@ app.post('/', async (req, res) => {
         userData.country = countryCode;
         const function_responsePromise = get_hotel_list(countryCode, cityName);
         const function_response = await function_responsePromise;
-        console.log("hotelData fetched");
         hotelData = function_response.data.map(item => {
           const tags = extract_tags(item.hotelDescription);
           return {
@@ -182,7 +226,7 @@ app.post('/', async (req, res) => {
         servicesFilterApplied = true;
         console.log(`hotelData filtered by services. Number of elements: ${numElements}`);
       }
-      if (userData.hotelIds && userData.checkin && userData.checkout && !pricingFetched && numElements < 50) {
+        if (userData.hotelIds && userData.checkin && userData.checkout && !pricingFetched && numElements < 50) {
         const function_response = await get_booking_price(userData.hotelIds, userData.checkin, userData.checkout);
         hotelData.priceData = function_response.data;
         pricingFetched = true;
@@ -198,7 +242,7 @@ app.post('/', async (req, res) => {
             },
             { 
                 role: 'user', 
-                content: `As a travel assistant, assist me with my travel planning. Utilize the data in ${JSON.stringify(userData)} to manage my current travel details and naturally inquire about any missing information (excluding 'hotelIds' which is auto-populated). Always engage in a natural conversation to obtain any missing details.` 
+                content: `As a travel assistant, assist me with my travel planning. Utilize the data in ${JSON.stringify(userData)} to manage my current travel details and naturally inquire about any missing information (excluding 'hotelIds' which is auto-populated). Always engage in a natural conversation to obtain any missing details. Refer to the following conversation history for context: ${historyString}.` 
             },
         ],
           temperature: 0.2,

@@ -15,13 +15,15 @@
       <img src="./assets/nuitee.png" alt="ask me anything">
       <h2>Hi! I am <span>Your travel assistant</span>.</h2>
     </header>
-    <section id="chat-container"></section>
-
+    <div id="content-area"> <!-- Add this wrapper -->
+      <section id="console-container"></section>
+      <section id="chat-container"></section>
+    </div>
+    
     <form>
       <textarea name="prompt" placeholder="Ask me about your holidays !" cols="1" rows="1"></textarea>
       <button type="submit"><img src="./assets/send.svg" alt="send"></button>
     </form>
-
   </div>
   <script type="module" src="/app.js"></script>
 </body>
