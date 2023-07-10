@@ -1,10 +1,10 @@
 import * as dotenv from 'dotenv';
-import express, { json } from 'express';
 import cors from 'cors';
 import { Configuration, OpenAIApi } from 'openai';
 import session from 'express-session';
-import cookieParser from 'cookie-parser';
-import { get_hotel_list, get_booking_price, get_country_code, extract_tags, filter_by_tags } from './functions.js';
+import { get_hotel_list, get_booking_price, get_country_code, extract_tags, filter_by_tags, updateUserData } from './functions.js';
+import { createClient } from 'redis';
+import RedisStore from "connect-redis"
 
 dotenv.config();
 
@@ -22,10 +22,20 @@ const app = express();
 
 // Add middleware
 app.use(express.json());
-app.use(cors());
-
-let userData;
+app.use(cors({
+  origin: 'http://localhost:5173', // specify the origin
+  credentials: true // this allows the session cookie to be sent back and forth
+}));
 const history = [];
+const userData = {
+  city: null,
+  country: null,
+  checkin: null,
+  checkout: null,
+  hotelIds: null,
+  hotelStars: null,
+  hotelServices: null
+};
 
 //console logs route
 
@@ -54,47 +64,95 @@ const consoleLogMiddleware = (req, res, next) => {
   next();
 };
 
-
-// Middleware to allow cross-origin requests
-const allowCrossOriginMiddleware = (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
-};
-
 app.use(consoleLogMiddleware);
-app.use(allowCrossOriginMiddleware);
+//app.use(allowCrossOriginMiddleware);
 
 // Route to get console logs
 app.get('/console-logs', (req, res) => {
   res.json(consoleLogs);
 });
 
-
-
-
-
 //Session creation
-app.use(cookieParser());
-app.use(session({
-  secret: '88K10g8flw1y7KcrN6KnXkxKflNekxjf',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: true, maxAge: 60000 }
-}));
-app.post('/clear-session', (req, res) => {
-  userData = {
-    city: null,
-    country: null,
-    checkin: null,
-    checkout: null,
-    hotelIds: null,
-    hotelStars: null,
-    hotelServices:null
+//connect to DB 
+const client = createClient({
+  host: '127.0.0.1',
+  port: '6379'
+});
 
-  };
-  console.log('userData reset');
-  res.send();
+await client.connect();
+
+client.on('ready', function () {
+  console.log('Redis client ready');
+  // Use the client here
+});
+
+client.on('connect', function () {
+  console.log('Connected to Redis...');
+});
+
+client.on('error', function (err) {
+  console.log('Redis error: ' + err);
+});
+
+app.use(
+  session({
+    store: new RedisStore({ client: client }),
+    secret: '88K10g8flw1y7KcrN6KnXkxKflNekxjf',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 600000 },
+  }),
+);
+
+app.use((req, res, next) => {
+  if (!req.session.userData) {
+    console.log(req.session.userData);
+    req.session.userData = {
+      city: null,
+      country: null,
+      checkin: null,
+      checkout: null,
+      hotelIds: null,
+      hotelStars: null,
+      hotelServices: null
+    };
+    console.log("userData created");
+  }
+  if (!req.session.hotelData) {
+    req.session.hotelData = {
+      id: null,
+      name: null,
+      tags: null
+    };
+    console.log("hotelData created");
+  }
+  next();
+});
+
+app.get('/initialize-session', (req, res) => {
+  req.session.regenerate((err) => {
+    if (err) {
+      console.log('Error saving session: ', err);
+      res.status(500).send('Error initializing session');
+    } else {
+      req.session.userData = {
+        city: null,
+        country: null,
+        checkin: null,
+        checkout: null,
+        hotelIds: null,
+        hotelStars: null,
+        hotelServices: null
+      }
+      req.session.hotelData = {
+        id: null,
+        name: null,
+        tags: null
+      }
+      console.log('session initialized');
+      res.status(200).send('Session initialized successfully');
+    }
+  });
 });
 
 // Create a route
@@ -104,7 +162,6 @@ app.get('/', async (req, res) => {
   });
 });
 
-let hotelData;
 let cityName, checkin, checkout, hotelStars, countryCode, hotelServices, starsFilterApplied, pricingFetched, servicesFilterApplied, hotelDataFetched, numElements;
 
 app.post('/', async (req, res) => {
@@ -160,13 +217,10 @@ app.post('/', async (req, res) => {
       frequency_penalty: 0.5,
       presence_penalty: 0,
     });
-
     history[history.length - 1].response = response.data.choices[0].message.content;  //Append conversation to chat history - Building context
-    console.log("request Sent");
 
     // Check  if function was called
     let messageContent = response.data.choices[0].message;
-    console.log(messageContent);
     if (messageContent.hasOwnProperty('function_call')) {
       const function_name = messageContent.function_call.name;
       console.log(function_name);
@@ -184,19 +238,20 @@ app.post('/', async (req, res) => {
       if (hotelServices) userData.hotelServices = hotelServices;
       if (checkin) userData.checkin = checkin;
       if (checkout) userData.checkout = checkout;
+      updateUserData(req, userData);
       //Get country code if cityname is available
       console.log("parsing data and executing API requests")
       //Execute functions to gather data
       //Gather hotel data
-      if (hotelData) numElements = hotelData.length;
+      if (req.session.hotelData) numElements = req.session.hotelData.length;
       if (cityName && !hotelDataFetched) {
         console.log("get countryCode");
         const data = await get_country_code(cityName, apiKey);
         countryCode = data[0].country;
-        userData.country = countryCode;
+        req.session.userData.country = countryCode;
         const function_responsePromise = get_hotel_list(countryCode, cityName);
         const function_response = await function_responsePromise;
-        hotelData = function_response.data.map(item => {
+        req.session.hotelData = function_response.data.map(item => {
           const tags = extract_tags(item.hotelDescription);
           return {
             id: item.id,
@@ -205,30 +260,30 @@ app.post('/', async (req, res) => {
             stars: item.stars
           }
         })
-        userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
+        req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
         hotelDataFetched = true;
-        numElements = hotelData.length;
-        console.log(`HotelData filled. Number of elements: ${numElements}`);
+        numElements = req.session.hotelData.length;
+        console.log(`Hotel data fetched. Number of elements: ${numElements}`);
       };
-      if (userData.hotelStars && hotelData && !starsFilterApplied) {
-        console.log(hotelStars);
+      if (req.session.userData.hotelStars && req.session.hotelData && !starsFilterApplied) {
+        //console.log(hotelStars);
         hotelStars = Number(hotelStars);
-        hotelData = hotelData.filter(hotel => hotel.stars === hotelStars);
-        userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        numElements = hotelData.length;
+        req.session.hotelData = req.session.hotelData.filter(hotel => hotel.stars === hotelStars);
+        req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
+        numElements = req.session.hotelData.length;
         starsFilterApplied = true;
-        console.log(`HotelData filtered by stars. Number of elements: ${numElements}`);
+        console.log(`Hotel data filtered by stars. Number of elements: ${numElements}`);
       }
-      if (userData.hotelServices && hotelData && !servicesFilterApplied) {
-        hotelData = await filter_by_tags(hotelData, hotelServices);
-        userData.hotelIds = hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        numElements = hotelData.length;
+      if (req.session.userData.hotelServices && req.session.hotelData && !servicesFilterApplied) {
+        req.session.hotelData = await filter_by_tags(req.session.hotelData, hotelServices);
+        req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
+        numElements = req.session.hotelData.length;
         servicesFilterApplied = true;
-        console.log(`hotelData filtered by services. Number of elements: ${numElements}`);
+        console.log(`Hotel Data filtered by services. Number of elements: ${numElements}`);
       }
-        if (userData.hotelIds && userData.checkin && userData.checkout && !pricingFetched && numElements < 50) {
-        const function_response = await get_booking_price(userData.hotelIds, userData.checkin, userData.checkout);
-        hotelData.priceData = function_response.data;
+      if (req.session.userData.hotelIds && req.session.userData.checkin && req.session.userData.checkout && !pricingFetched && numElements < 50) {
+        const function_response = await get_booking_price(req.session.userData.hotelIds, req.session.userData.checkin, req.session.userData.checkout);
+        req.session.hotelData.priceData = function_response.data;
         pricingFetched = true;
         console.log("Pricing fetched")
       }
@@ -236,15 +291,15 @@ app.post('/', async (req, res) => {
         response = await openai.createChatCompletion({
           model: 'gpt-3.5-turbo-0613',
           messages: [
-            { 
-                role: 'system', 
-                content: `As a travel assistant, your role includes processing and displaying hotel data. The user's travel details can be found in ${JSON.stringify(userData)}, and the current hotel and pricing data is in ${JSON.stringify(hotelData)}. Present the hotel data in an organized table format.` 
+            {
+              role: 'system',
+              content: `As a travel assistant, your role includes processing and displaying hotel data. The user's travel details can be found in ${JSON.stringify(req.session.userData)}, and the current hotel and pricing data is in ${JSON.stringify(req.session.hotelData)}. When priceData is filled, you can Present the hotel data in an organized table format.`
             },
-            { 
-                role: 'user', 
-                content: `As a travel assistant, assist me with my travel planning. Utilize the data in ${JSON.stringify(userData)} to manage my current travel details and naturally inquire about any missing information (excluding 'hotelIds' which is auto-populated). Always engage in a natural conversation to obtain any missing details. Refer to the following conversation history for context: ${historyString}.` 
+            {
+              role: 'user',
+              content: `As a travel assistant, assist me with my travel planning. Utilize the data in ${JSON.stringify(req.session.userData)} to manage my current travel details and naturally inquire about any missing information (excluding 'hotelIds' which is auto-populated). Always engage in a natural conversation to obtain any missing details like the checkin and chekout dates. Refer to the following conversation history for context: ${historyString}.`
             },
-        ],
+          ],
           temperature: 0.2,
           //max_tokens: 3000,
           top_p: 1,
@@ -262,7 +317,7 @@ app.post('/', async (req, res) => {
             },
             {
               role: 'user',
-              content: `This is my current travel information: ${JSON.stringify(userData)}. Please ask me more about my hotel preferences, such as star rating and services, to better refine your search. Refer to the following conversation history for context: ${historyString}.`
+              content: `This is my current travel information: ${JSON.stringify(req.session.userData)}. Please ask me more about my hotel preferences, such as star rating and services, to better refine your search. Refer to the following conversation history for context: ${historyString}.`
             },
           ],
           temperature: 0.3,
@@ -272,13 +327,15 @@ app.post('/', async (req, res) => {
           presence_penalty: 0,
         });
       }
-      if (hotelData) console.log(Object.keys(hotelData).length);
+
+      //if (req.session.hotelData) console.log(Object.keys(req.session.hotelData).length);
       if (starsFilterApplied) console.log(`Stars filter applied: ${starsFilterApplied}`);
       if (servicesFilterApplied) console.log(`Services filter applied: ${servicesFilterApplied}`);
       if (pricingFetched) console.log(`Pricing fetched: ${pricingFetched}`);
-      if (hotelDataFetched) console.log(`Hotel Data Fetched: ${hotelDataFetched}`);
+      if (req.session.hotelDataFetched) console.log(`Hotel Data Fetched: ${req.session.hotelDataFetched}`);
     }
-    console.log(userData);
+    console.log(req.session.userData);
+    //console.log(req.session.hotelData);
     res.status(200).send({
       message: response.data.choices[0].message.content
     });

@@ -20,6 +20,16 @@ const loader = (element) => {
     }
   }, 300);
 };
+//create new session
+document.addEventListener('DOMContentLoaded', function(event) {
+  fetch('http://localhost:8080/initialize-session', {
+    method: 'GET',
+    credentials: 'include'
+  })
+  .then(res => res.text())
+  .then(data => console.log(data))
+  .catch(err => console.error('Error:', err));
+});
 
 // to generate unique id for each bot message to be able to select it while loading
 const generateUniqueID = () => {
@@ -88,6 +98,7 @@ const handleSubmit = async (e) => {
 
   const response = await fetch('http://localhost:8080', {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },

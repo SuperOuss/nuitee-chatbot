@@ -149,4 +149,22 @@ export function filter_by_tags(hotelData, hotelServices) {
     console.error('An error occurred in filter_by_tags:', error);
     return []; // Return an empty array to indicate no matching results
   }
-}
+};
+
+export function updateUserData(req, userData) {
+  if (userData.city) {
+    req.session.userData.city = userData.city;
+  }
+  if (userData.hotelStars) {
+    req.session.userData.hotelStars = userData.hotelStars;
+  }
+  if (userData.hotelServices) {
+    req.session.userData.hotelServices = userData.hotelServices;
+  }
+  if (userData.checkin) {
+    req.session.userData.checkin = userData.checkin;
+  }
+  if (userData.checkout) {
+    req.session.userData.checkout = userData.checkout;
+  }
+};
