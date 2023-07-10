@@ -1,5 +1,5 @@
 # Use an official Node runtime as the base image
-FROM node:14
+FROM node:20
 
 # Set the working directory in the container to /client
 WORKDIR /client
