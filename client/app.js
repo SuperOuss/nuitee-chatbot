@@ -22,7 +22,7 @@ const loader = (element) => {
 };
 //create new session
 document.addEventListener('DOMContentLoaded', function(event) {
-  fetch('http://localhost:8080/initialize-session', {
+  fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com:8080/initialize-session', {
     method: 'GET',
     credentials: 'include'
   })
@@ -96,7 +96,7 @@ const handleSubmit = async (e) => {
 
   // get bot's response from server
 
-  const response = await fetch('http://localhost:8080', {
+  const response = await fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com:8080', {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -124,7 +124,7 @@ const handleSubmit = async (e) => {
 
 //# EVENT LISTENERS
 window.addEventListener('beforeunload', function (event) {
-  fetch('http://localhost:8080/clear-session/', {
+  fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com/clear-session/', {
     method: 'POST',
   });
 });
