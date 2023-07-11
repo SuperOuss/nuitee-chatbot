@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y redis-server
 
 # Copy the rest of your server code to the working directory
 COPY . .
-COPY .env ./
 
 # Make port 8080 available to the world outside this container
 EXPOSE 8080
