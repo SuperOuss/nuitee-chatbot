@@ -24,7 +24,7 @@ const app = express();
 // Add middleware
 app.use(express.json());
 app.use(cors({
-  origin: 'ec2-44-203-135-172.compute-1.amazonaws.com:5173', // specify the origin
+  origin: 'http://ec2-44-203-135-172.compute-1.amazonaws.com:5173', // specify the origin
   credentials: true // this allows the session cookie to be sent back and forth
 }));
 const history = [];
