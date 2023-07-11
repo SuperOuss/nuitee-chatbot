@@ -11,9 +11,6 @@ dotenv.config();
 const sdk = api('@nuitee-lite-api/v2.0#3pqsm7iljhiq6wu');
 //const sdk = api('@nuitee-lite-api/v1.0.5#oa30lhz0i0g3');
 
-var tokenizer = new natural.WordTokenizer();
-
-
 
 
 export function get_hotel_list(countryCode, cityName) {
@@ -151,20 +148,30 @@ export function filter_by_tags(hotelData, hotelServices) {
   }
 };
 
-export function updateUserData(req, userData) {
-  if (userData.city) {
-    req.session.userData.city = userData.city;
+//update session data
+export function updateUserData(req, args) {
+  if (args.cityName) {
+    req.session.userData.city = args.cityName;
   }
-  if (userData.hotelStars) {
-    req.session.userData.hotelStars = userData.hotelStars;
+  if (args.hotelStars) {
+    req.session.userData.hotelStars = args.hotelStars;
   }
-  if (userData.hotelServices) {
-    req.session.userData.hotelServices = userData.hotelServices;
+  if (args.hotelServices) {
+    req.session.userData.hotelServices = args.hotelServices;
   }
-  if (userData.checkin) {
-    req.session.userData.checkin = userData.checkin;
+  if (args.checkin) {
+    req.session.userData.checkin = args.checkin;
   }
-  if (userData.checkout) {
-    req.session.userData.checkout = userData.checkout;
+  if (args.checkout) {
+    req.session.userData.checkout = args.checkout;
   }
 };
+
+
+export function resetGlobalVariables(globalVariables) {
+  globalVariables.starsFilterApplied = false; 
+  globalVariables.pricingFetched = false; 
+  globalVariables.servicesFilterApplied = false; 
+  globalVariables.hotelDataFetched = false; 
+  globalVariables.numElements = 0; 
+}

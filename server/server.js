@@ -3,7 +3,7 @@ import express, { json } from 'express';
 import cors from 'cors';
 import { Configuration, OpenAIApi } from 'openai';
 import session from 'express-session';
-import { get_hotel_list, get_booking_price, get_country_code, extract_tags, filter_by_tags, updateUserData } from './functions.js';
+import { get_hotel_list, get_booking_price, get_country_code, extract_tags, filter_by_tags, updateUserData, resetGlobalVariables } from './functions.js';
 import { createClient } from 'redis';
 import RedisStore from "connect-redis"
 
@@ -24,22 +24,13 @@ const app = express();
 // Add middleware
 app.use(express.json());
 app.use(cors({
-  origin: 'http://ec2-44-203-135-172.compute-1.amazonaws.com:5173', // specify the origin
+  origin: 'ec2-44-203-135-172.compute-1.amazonaws.com:5173', // specify the origin
   credentials: true // this allows the session cookie to be sent back and forth
 }));
 const history = [];
-const userData = {
-  city: null,
-  country: null,
-  checkin: null,
-  checkout: null,
-  hotelIds: null,
-  hotelStars: null,
-  hotelServices: null
-};
+
 
 //console logs route
-
 // Array to store console logs
 const consoleLogs = [];
 
@@ -80,7 +71,7 @@ const client = createClient({
   port: '6379'
 });
 
-await client.connect();
+client.connect();
 
 client.on('ready', function () {
   console.log('Redis client ready');
@@ -123,18 +114,28 @@ app.use((req, res, next) => {
     req.session.hotelData = {
       id: null,
       name: null,
-      tags: null
+      tags: null,
+      pricingData: null
     };
     console.log("hotelData created");
   }
   next();
 });
 
-app.get('/initialize-session', (req, res) => {
+//declare global variables
+let globalVariables = {
+  starsFilterApplied: false,
+  pricingFetched: false,
+  servicesFilterApplied: false,
+  hotelDataFetched: false,
+  numElements: 0
+}
+
+app.get('/regenerate-session', (req, res) => {
   req.session.regenerate((err) => {
     if (err) {
-      console.log('Error saving session: ', err);
-      res.status(500).send('Error initializing session');
+      console.log('Error regenerating session: ', err);
+      res.status(500).send('Error regenerating session');
     } else {
       req.session.userData = {
         city: null,
@@ -148,10 +149,12 @@ app.get('/initialize-session', (req, res) => {
       req.session.hotelData = {
         id: null,
         name: null,
-        tags: null
+        tags: null,
+        pricingData: null
       }
-      console.log('session initialized');
-      res.status(200).send('Session initialized successfully');
+      resetGlobalVariables(globalVariables);
+      console.log('session regenerated');
+      res.status(200).send('Session regenerated successfully');
     }
   });
 });
@@ -163,7 +166,7 @@ app.get('/', async (req, res) => {
   });
 });
 
-let cityName, checkin, checkout, hotelStars, countryCode, hotelServices, starsFilterApplied, pricingFetched, servicesFilterApplied, hotelDataFetched, numElements;
+
 
 app.post('/', async (req, res) => {
   try {
@@ -228,29 +231,18 @@ app.post('/', async (req, res) => {
       //check for data
       const args = JSON.parse(messageContent.function_call.arguments);
       console.log(args);
-      if (args.cityName) cityName = args.cityName;
-      if (args.hotelStars) hotelStars = args.hotelStars;
-      if (args.checkin) checkin = args.checkin;
-      if (args.checkout) checkout = args.checkout;
-      if (args.hotelStars) hotelStars = args.hotelStars;
-      if (args.hotelServices) hotelServices = args.hotelServices;
-      if (cityName) userData.city = cityName;
-      if (hotelStars) userData.hotelStars = hotelStars;
-      if (hotelServices) userData.hotelServices = hotelServices;
-      if (checkin) userData.checkin = checkin;
-      if (checkout) userData.checkout = checkout;
-      updateUserData(req, userData);
+      updateUserData(req, args);
+      console.log(req.session.userData);
       //Get country code if cityname is available
       console.log("parsing data and executing API requests")
       //Execute functions to gather data
       //Gather hotel data
-      if (req.session.hotelData) numElements = req.session.hotelData.length;
-      if (cityName && !hotelDataFetched) {
+      if (req.session.hotelData) globalVariables.numElements = req.session.hotelData.length;
+      if (req.session.userData.city && !globalVariables.hotelDataFetched) {
         console.log("get countryCode");
-        const data = await get_country_code(cityName, apiKey);
-        countryCode = data[0].country;
-        req.session.userData.country = countryCode;
-        const function_responsePromise = get_hotel_list(countryCode, cityName);
+        const data = await get_country_code(req.session.userData.city, apiKey);
+        req.session.userData.country = data[0].country;
+        const function_responsePromise = get_hotel_list(req.session.userData.country, req.session.userData.city);
         const function_response = await function_responsePromise;
         req.session.hotelData = function_response.data.map(item => {
           const tags = extract_tags(item.hotelDescription);
@@ -262,53 +254,138 @@ app.post('/', async (req, res) => {
           }
         })
         req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        hotelDataFetched = true;
-        numElements = req.session.hotelData.length;
-        console.log(`Hotel data fetched. Number of elements: ${numElements}`);
+        globalVariables.hotelDataFetched = true;
+        globalVariables.numElements = req.session.hotelData.length;
+        console.log(`Hotel data fetched. Number of elements: ${globalVariables.numElements}`);
       };
-      if (req.session.userData.hotelStars && req.session.hotelData && !starsFilterApplied) {
+      if (req.session.userData.hotelStars && globalVariables.hotelDataFetched && !globalVariables.starsFilterApplied) {
         //console.log(hotelStars);
-        hotelStars = Number(hotelStars);
-        req.session.hotelData = req.session.hotelData.filter(hotel => hotel.stars === hotelStars);
+        req.session.userData.hotelStars = Number(req.session.userData.hotelStars);
+        req.session.hotelData = req.session.hotelData.filter(hotel => hotel.stars === req.session.userData.hotelStars);
         req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        numElements = req.session.hotelData.length;
-        starsFilterApplied = true;
-        console.log(`Hotel data filtered by stars. Number of elements: ${numElements}`);
+        globalVariables.numElements = req.session.hotelData.length;
+        globalVariables.starsFilterApplied = true;
+        console.log(`Hotel data filtered by stars. Number of elements: ${globalVariables.numElements}`);
       }
-      if (req.session.userData.hotelServices && req.session.hotelData && !servicesFilterApplied) {
-        req.session.hotelData = await filter_by_tags(req.session.hotelData, hotelServices);
+      if (req.session.userData.hotelServices && globalVariables.hotelDataFetched && !globalVariables.servicesFilterApplied) {
+        req.session.hotelData = await filter_by_tags(req.session.hotelData, req.session.userData.hotelServices);
         req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
-        numElements = req.session.hotelData.length;
-        servicesFilterApplied = true;
-        console.log(`Hotel Data filtered by services. Number of elements: ${numElements}`);
+        globalVariables.numElements = req.session.hotelData.length;
+        globalVariables.servicesFilterApplied = true;
+        console.log(`Hotel Data filtered by services. Number of elements: ${globalVariables.numElements}`);
       }
-      if (req.session.userData.hotelIds && req.session.userData.checkin && req.session.userData.checkout && !pricingFetched && numElements < 50) {
-        const function_response = await get_booking_price(req.session.userData.hotelIds, req.session.userData.checkin, req.session.userData.checkout);
-        req.session.hotelData.priceData = function_response.data;
-        pricingFetched = true;
-        console.log("Pricing fetched")
+      if (req.session.userData.hotelIds && req.session.userData.checkin && req.session.userData.checkout && !globalVariables.pricingFetched && globalVariables.numElements < 50) {
+        try {
+          const function_response = await get_booking_price(req.session.userData.hotelIds, req.session.userData.checkin, req.session.userData.checkout);
+          req.session.hotelData.pricingData = function_response.data;
+          globalVariables.pricingFetched = true;
+          console.log("Pricing fetched")
+        } catch (error) {
+          if (error.message === "Suppliers not found") {
+            console.log("Pricing not available");
+          }
+        }
       }
-      if (numElements < 50) {
+
+      if (globalVariables.numElements < 50 && !req.session.userData.checkin) {
+        console.log("hotelData available, bot to ask for checkin and checkout dates");
         response = await openai.createChatCompletion({
           model: 'gpt-3.5-turbo-0613',
           messages: [
             {
               role: 'system',
-              content: `As a travel assistant, your role includes processing and displaying hotel data. The user's travel details can be found in ${JSON.stringify(req.session.userData)}, and the current hotel and pricing data is in ${JSON.stringify(req.session.hotelData)}. When priceData is filled, you can Present the hotel data in an organized table format.`
+              content: `As a travel assistant, your role includes processing and displaying hotel data. The user's travel details can be found in ${JSON.stringify(req.session.userData)}, and the current hotel data is in ${JSON.stringify(req.session.hotelData)}.`
             },
             {
               role: 'user',
-              content: `As a travel assistant, assist me with my travel planning. Utilize the data in ${JSON.stringify(req.session.userData)} to manage my current travel details and naturally inquire about any missing information (excluding 'hotelIds' which is auto-populated). Always engage in a natural conversation to obtain any missing details like the checkin and chekout dates. Refer to the following conversation history for context: ${historyString}.`
+              content: `Can you help me manage my current travel details? Here's the information I have: ${JSON.stringify(req.session.userData)}.`
+            },
+            {
+              role: 'system',
+              content: `Of course, I can help with that. Let's start by checking if we have all the necessary information.`
+            },
+            {
+              role: 'user',
+              content: `Please verify my check-in and check-out dates and inquire about any other missing details. Here's the conversation history for context: ${historyString}.`
             },
           ],
           temperature: 0.2,
-          //max_tokens: 3000,
-          top_p: 1,
+          top_p: 0.9,
           frequency_penalty: 0.5,
           presence_penalty: 0,
         });
       }
-      if (numElements > 50) {
+      if (globalVariables.numElements < 50 && globalVariables.pricingFetched) {
+        console.log("Hotel Data and pricing available, bot to present current data to user");
+        response = await openai.createChatCompletion({
+          model: 'gpt-3.5-turbo-0613',
+          messages: [
+            {
+              role: 'system',
+              content: `As a travel assistant, your role includes processing and displaying hotel data. The user's travel details can be found in ${JSON.stringify(req.session.userData)}, and the current hotel and pricing data is in ${JSON.stringify(req.session.hotelData)}.`
+            },
+            {
+              role: 'user',
+              content: `Can you help me manage my current travel details? Here's the information I have: ${JSON.stringify(req.session.userData)}.`
+            },
+            {
+              role: 'system',
+              content: `Of course, I can help with that. Let's start by checking if we have all the necessary information.`
+            },
+            {
+              role: 'user',
+              content: `Please verify my check-in and check-out dates and inquire about any other missing details. Here's the conversation history for context: ${historyString}.`
+            },
+          ],
+          temperature: 0.2,
+          top_p: 0.9,
+          frequency_penalty: 0.5,
+          presence_penalty: 0,
+        });
+      }
+      if (globalVariables.numElements < 50 && !req.session.hotelData.pricingData && req.session.userData.checkin) {
+        console.log("All data available besides pricing. Bot to apologize to user and present current data");
+        let firstFiveHotels = req.session.hotelData.slice(0, 5);
+        response = await openai.createChatCompletion({
+          model: 'gpt-3.5-turbo-0613',
+          messages: [
+            {
+              role: 'system',
+              content: `As a travel assistant, I apologize for the unavailability of the pricing data. However, I can still provide information about the first few hotels. Here are details of the first few hotels: ${JSON.stringify(firstFiveHotels)}.`
+            },
+            {
+              role: 'user',
+              content: `Can you summarize the information about these five hotels and apologize about the lack of pricing data?`
+            },
+          ],
+          temperature: 0.2,
+          top_p: 0.9,
+          frequency_penalty: 0.5,
+          presence_penalty: 0,
+        });
+      }
+      if (!req.session.userData.city) {
+        console.log("No destination provided, bot to ask for city in order to build dataset");
+        response = await openai.createChatCompletion({
+          model: 'gpt-3.5-turbo-0613',
+          messages: [
+            {
+              role: 'system',
+              content: `As a travel assistant, I can't assist you unless you provide the city name`
+            },
+            {
+              role: 'user',
+              content: `Can you ask me where I want to go`
+            },
+          ],
+          temperature: 0.2,
+          top_p: 0.9,
+          frequency_penalty: 0.5,
+          presence_penalty: 0,
+        });
+      }
+      if (globalVariables.numElements > 50) {
+        console.log("hotel data set still large, filtering by stars and services");
         response = await openai.createChatCompletion({
           model: 'gpt-3.5-turbo-0613',
           messages: [
@@ -328,15 +405,13 @@ app.post('/', async (req, res) => {
           presence_penalty: 0,
         });
       }
-
       //if (req.session.hotelData) console.log(Object.keys(req.session.hotelData).length);
-      if (starsFilterApplied) console.log(`Stars filter applied: ${starsFilterApplied}`);
-      if (servicesFilterApplied) console.log(`Services filter applied: ${servicesFilterApplied}`);
-      if (pricingFetched) console.log(`Pricing fetched: ${pricingFetched}`);
-      if (req.session.hotelDataFetched) console.log(`Hotel Data Fetched: ${req.session.hotelDataFetched}`);
+      if (globalVariables.starsFilterApplied) console.log(`Stars filter applied: ${globalVariables.starsFilterApplied}`);
+      if (globalVariables.servicesFilterApplied) console.log(`Services filter applied: ${globalVariables.servicesFilterApplied}`);
+      if (globalVariables.pricingFetched) console.log(`Pricing fetched: ${globalVariables.pricingFetched}`);
+      if (globalVariables.hotelDataFetched) console.log(`Hotel Data Fetched: ${globalVariables.hotelDataFetched}`);
     }
     console.log(req.session.userData);
-    //console.log(req.session.hotelData);
     res.status(200).send({
       message: response.data.choices[0].message.content
     });
@@ -357,5 +432,5 @@ app.post('/', async (req, res) => {
 });
 // Start the server
 app.listen(process.env.PORT, '0.0.0.0', () => {
-  console.log(`Server running on port http://localhost:${process.env.PORT}`);
+  console.log(`Server running on port ec2-44-203-135-172.compute-1.amazonaws.com:${process.env.PORT}`);
 });
