@@ -1,7 +1,6 @@
 import * as dotenv from 'dotenv';
 import api from 'api';
 import axios from 'axios';
-import natural from 'natural';
 import nlp from 'compromise';
 
 
@@ -15,7 +14,7 @@ const sdk = api('@nuitee-lite-api/v2.0#3pqsm7iljhiq6wu');
 
 export function get_hotel_list(countryCode, cityName) {
   return new Promise((resolve, reject) => {
-    sdk.auth('sand_274c9e01-f574-429d-b1b5-0fdd333d890f');
+    sdk.auth('sand_18076550-e7d1-40f0-8a97-3bd9b2cdae9b');
     sdk.getDataHotels({ countryCode: countryCode, cityName: cityName, limit: '200' })
       .then(({ data }) => {
         resolve(data);
@@ -28,7 +27,7 @@ export function get_hotel_list(countryCode, cityName) {
 
 export function get_booking_price(hotelIds, checkin, checkout) {
   return new Promise((resolve, reject) => {
-    sdk.auth('sand_274c9e01-f574-429d-b1b5-0fdd333d890f');
+    sdk.auth('sand_18076550-e7d1-40f0-8a97-3bd9b2cdae9b');
     sdk.getHotels({
       hotelIds: hotelIds,
       checkin: checkin,
