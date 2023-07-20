@@ -21,6 +21,8 @@ jobs:
     - name: Run Docker commands on AWS server
       run: |
         ssh -o StrictHostKeyChecking=no ec2-user@ec2-44-203-135-172.compute-1.amazonaws.com << 'EOF'
+        cd nuitee-chatbot
+        sudo git pull origin
         docker stop $(docker ps -aq) || true
         docker rm $(docker ps -aq) || true
         docker rmi $(docker images -q) || true
