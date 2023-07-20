@@ -115,7 +115,7 @@ app.use((req, res, next) => {
       id: null,
       name: null,
       tags: null,
-      pricingData: null
+      pricing: null
     };
     console.log("hotelData created");
   }
@@ -150,7 +150,7 @@ app.get('/regenerate-session', (req, res) => {
         id: null,
         name: null,
         tags: null,
-        pricingData: null
+        pricing: null
       }
       resetGlobalVariables(globalVariables);
       console.log('session regenerated');
@@ -244,6 +244,7 @@ app.post('/', async (req, res) => {
         req.session.userData.country = data[0].country;
         const function_responsePromise = get_hotel_list(req.session.userData.country, req.session.userData.city);
         const function_response = await function_responsePromise;
+        console.log(`Hotel data fetched. Number of elements: ${JSON.stringify(function_response.total)}`)
         req.session.hotelData = function_response.data.map(item => {
           const tags = extract_tags(item.hotelDescription);
           return {
@@ -256,7 +257,7 @@ app.post('/', async (req, res) => {
         req.session.userData.hotelIds = req.session.hotelData.map(hotel => encodeURIComponent(hotel.id)).join('%2C');
         globalVariables.hotelDataFetched = true;
         globalVariables.numElements = req.session.hotelData.length;
-        console.log(`Hotel data fetched. Number of elements: ${globalVariables.numElements}`);
+        console.log(`Internal hotel data fetched. Number of elements: ${globalVariables.numElements}`);
       };
       if (req.session.userData.hotelStars && globalVariables.hotelDataFetched && !globalVariables.starsFilterApplied) {
         //console.log(hotelStars);
@@ -277,16 +278,25 @@ app.post('/', async (req, res) => {
       if (req.session.userData.hotelIds && req.session.userData.checkin && req.session.userData.checkout && !globalVariables.pricingFetched && globalVariables.numElements < 50) {
         try {
           const function_response = await get_booking_price(req.session.userData.hotelIds, req.session.userData.checkin, req.session.userData.checkout);
-          req.session.hotelData.pricingData = function_response.data;
+          let pricingData = function_response.data;
+          for (let i = 0; i < req.session.hotelData.length; i++) {
+            for (let j = 0; j < pricingData.length; j++) {
+              if (pricingData[j].hotelId === req.session.hotelData[i].id) {
+                req.session.hotelData[i].pricing = pricingData[j].price;
+                break;
+              }
+            }
+          }
+          console.log(`${JSON.stringify(req.session.hotelData)}`)
           globalVariables.pricingFetched = true;
-          console.log("Pricing fetched")
+          console.log(`Number of elements: ${globalVariables.numElements}`);
+          console.log(`Pricing data ${JSON.stringify(req.session.hotelData.pricingData)}`);
         } catch (error) {
           if (error.message === "Suppliers not found") {
             console.log("Pricing not available");
           }
         }
       }
-
       if (globalVariables.numElements < 50 && !req.session.userData.checkin) {
         console.log("hotelData available, bot to ask for checkin and checkout dates");
         response = await openai.createChatCompletion({
@@ -298,15 +308,7 @@ app.post('/', async (req, res) => {
             },
             {
               role: 'user',
-              content: `Can you help me manage my current travel details? Here's the information I have: ${JSON.stringify(req.session.userData)}.`
-            },
-            {
-              role: 'system',
-              content: `Of course, I can help with that. Let's start by checking if we have all the necessary information.`
-            },
-            {
-              role: 'user',
-              content: `Please verify my check-in and check-out dates and inquire about any other missing details. Here's the conversation history for context: ${historyString}.`
+              content: `Please ask about my check-in and check-out dates.`
             },
           ],
           temperature: 0.2,
@@ -317,33 +319,26 @@ app.post('/', async (req, res) => {
       }
       if (globalVariables.numElements < 50 && globalVariables.pricingFetched) {
         console.log("Hotel Data and pricing available, bot to present current data to user");
+        let firstFiveHotels = req.session.hotelData.slice(0, 10);
         response = await openai.createChatCompletion({
           model: 'gpt-3.5-turbo-0613',
           messages: [
             {
               role: 'system',
-              content: `As a travel assistant, your role includes processing and displaying hotel data. The user's travel details can be found in ${JSON.stringify(req.session.userData)}, and the current hotel and pricing data is in ${JSON.stringify(req.session.hotelData)}.`
+              content: `As a travel assistant, your role includes processing and displaying hotel pricing. Please present hotel Data with pricing from ${JSON.stringify(firstFiveHotels)}`
             },
             {
               role: 'user',
-              content: `Can you help me manage my current travel details? Here's the information I have: ${JSON.stringify(req.session.userData)}.`
-            },
-            {
-              role: 'system',
-              content: `Of course, I can help with that. Let's start by checking if we have all the necessary information.`
-            },
-            {
-              role: 'user',
-              content: `Please verify my check-in and check-out dates and inquire about any other missing details. Here's the conversation history for context: ${historyString}.`
+              content: `Can you display the current data on hotels and pricing in a concise manner: Hotel name, number of stars and price.`
             },
           ],
-          temperature: 0.2,
+          temperature: 0.4,
           top_p: 0.9,
           frequency_penalty: 0.5,
           presence_penalty: 0,
         });
       }
-      if (globalVariables.numElements < 50 && !req.session.hotelData.pricingData && req.session.userData.checkin) {
+      if (globalVariables.numElements < 50 && !globalVariables.pricingFetched && req.session.userData.checkin) {
         console.log("All data available besides pricing. Bot to apologize to user and present current data");
         let firstFiveHotels = req.session.hotelData.slice(0, 5);
         response = await openai.createChatCompletion({
@@ -395,7 +390,7 @@ app.post('/', async (req, res) => {
             },
             {
               role: 'user',
-              content: `This is my current travel information: ${JSON.stringify(req.session.userData)}. Please ask me more about my hotel preferences, such as star rating and services, to better refine your search. Refer to the following conversation history for context: ${historyString}.`
+              content: `This is my current travel information: ${JSON.stringify(req.session.userData)}. Please ask me more about my hotel preferences, such as star rating and services, to better refine your search.`
             },
           ],
           temperature: 0.3,

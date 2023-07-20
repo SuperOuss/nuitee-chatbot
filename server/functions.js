@@ -15,7 +15,7 @@ const sdk = api('@nuitee-lite-api/v2.0#3pqsm7iljhiq6wu');
 export function get_hotel_list(countryCode, cityName) {
   return new Promise((resolve, reject) => {
     sdk.auth('sand_18076550-e7d1-40f0-8a97-3bd9b2cdae9b');
-    sdk.getDataHotels({ countryCode: countryCode, cityName: cityName, limit: '200' })
+    sdk.getDataHotels({ countryCode: countryCode, cityName: cityName, limit: '200'})
       .then(({ data }) => {
         resolve(data);
       })
