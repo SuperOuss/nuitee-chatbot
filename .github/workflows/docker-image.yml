@@ -1,0 +1,31 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up SSH connection to AWS server
+      uses: webfactory/ssh-agent@v0.5.2
+      with:
+        ssh-private-key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+
+    - name: Run Docker commands on AWS server
+      run: |
+        ssh -o StrictHostKeyChecking=no ec2-user@ec2-44-203-135-172.compute-1.amazonaws.com << 'EOF'
+        docker stop $(docker ps -aq) || true
+        docker rm $(docker ps -aq) || true
+        docker rmi $(docker images -q) || true
+        docker build -t server-image -f ./server/server.dockerfile ./server
+        docker build -t client-image -f ./client/client.dockerfile ./client
+        docker run -d -p 8080:8080 --name server server-image
+        docker run -d -p 5173:5173 --name client client-image
+        EOF
