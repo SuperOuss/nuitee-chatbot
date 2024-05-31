@@ -18,15 +18,29 @@ const openai = new OpenAIApi(configuration);
 //import geocoding key
 const apiKey = process.env.API_NINJA_KEY;
 
+
 // Create an instance of express
 const app = express();
 
 // Add middleware
 app.use(express.json());
-app.use(cors({
-  origin: 'http://localhost:5173', // specify the origin
-  credentials: true // this allows the session cookie to be sent back and forth
-}));
+
+//cors configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+console.log(process.env.ALLOWED_ORIGINS);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true // This allows the session cookie to be sent back and forth
+};
+app.use(cors(corsOptions));
+
+
 const history = [];
 
 
