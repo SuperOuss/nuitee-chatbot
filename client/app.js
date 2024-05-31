@@ -22,7 +22,7 @@ const loader = (element) => {
 };
 //create new session
 document.addEventListener('DOMContentLoaded', function(event) {
-  fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com:8080/regenerate-session', {
+  fetch('http://localhost:8080/regenerate-session', {
     method: 'GET',
     credentials: 'include'
   })
@@ -96,7 +96,7 @@ const handleSubmit = async (e) => {
 
   // get bot's response from server
 
-  const response = await fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com:8080/', {
+  const response = await fetch('http://localhost:8080/', {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -136,7 +136,7 @@ form.addEventListener('keyup', (e) => {
 // Function to fetch and display console logs
 const fetchConsoleLogs = async () => {
   try {
-    const response = await fetch('http://ec2-44-203-135-172.compute-1.amazonaws.com:8080/console-logs');
+    const response = await fetch('http://localhost:8080/console-logs');
     if (response.ok) {
       const logs = await response.json();
 
