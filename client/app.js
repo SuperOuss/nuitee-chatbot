@@ -5,7 +5,7 @@ const form = document.querySelector('form');
 const chatContainer = document.querySelector('#chat-container');
 
 let loadInterval;
-const apiUrl = await window.getApiUrl();
+
 
 //# FUNCTIONS
 
@@ -22,7 +22,8 @@ const loader = (element) => {
   }, 300);
 };
 //create new session
-document.addEventListener('DOMContentLoaded', function(event) {
+document.addEventListener('DOMContentLoaded', async function(event) {
+  const apiUrl = await window.getApiUrl();
   fetch(`${apiUrl}/regenerate-session`, {
     method: 'GET',
     credentials: 'include'
@@ -94,7 +95,7 @@ const handleSubmit = async (e) => {
   loader(botMessageContainer);
 
   // get bot's response from server
-
+  const apiUrl = await window.getApiUrl();
   const response = await fetch(`${apiUrl}/`, {
     method: 'POST',
     credentials: 'include',
@@ -135,6 +136,7 @@ form.addEventListener('keyup', (e) => {
 // Function to fetch and display console logs
 const fetchConsoleLogs = async () => {
   try {
+    const apiUrl = await window.getApiUrl();
     const response = await fetch(`${apiUrl}/console-logs`);
     if (response.ok) {
       const logs = await response.json();
