@@ -13,6 +13,9 @@ RUN npm install
 # Copy the rest of your client code to the working directory
 COPY . .
 
+# Debugging: List files in the container
+RUN ls -la /client
+
 # Build the app for production
 RUN npm run build
 
