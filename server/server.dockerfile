@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y redis-server
 COPY . .
 
 # Make port 8080 available to the world outside this container
-EXPOSE 8080
+EXPOSE 3000
 
 # Expose Redis port
 EXPOSE 6379
