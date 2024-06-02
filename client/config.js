@@ -13,7 +13,7 @@ if (location.host === 'localhost:5173') {
   });
 }
 else  {
-fetch("https://chatbot.binga.network:3000/config")
+fetch("https://chatbot.binga.network/api/config")
   .then((response) => response.json())
   .then((config) => {
     API_URL = config.apiUrl;
