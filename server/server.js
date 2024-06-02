@@ -25,9 +25,10 @@ const app = express();
 // Add middleware
 app.use(express.json());
 
+
+
 //cors configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
-console.log(process.env.ALLOWED_ORIGINS);
 const corsOptions = {
   origin: (origin, callback) => {
     if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
@@ -38,7 +39,7 @@ const corsOptions = {
   },
   credentials: true // This allows the session cookie to be sent back and forth
 };
-app.use(cors(corsOptions));
+app.use(cors(corsOptions)); 
 
 
 const history = [];
@@ -177,6 +178,12 @@ app.get('/regenerate-session', (req, res) => {
 app.get('/', async (req, res) => {
   res.status(200).send({
     message: 'Hello from Nuitee travel assistant !',
+  });
+});
+
+app.get('/config', (req, res) => {
+  res.json({
+    apiUrl: process.env.API_URL,
   });
 });
 
@@ -441,5 +448,5 @@ app.post('/', async (req, res) => {
 });
 // Start the server
 app.listen(process.env.PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ec2-44-203-135-172.compute-1.amazonaws.com:${process.env.PORT}`);
+  console.log(`${process.env.API_URL}:${process.env.PORT}`);
 });

@@ -5,6 +5,7 @@ const form = document.querySelector('form');
 const chatContainer = document.querySelector('#chat-container');
 
 let loadInterval;
+const apiUrl = await window.getApiUrl();
 
 //# FUNCTIONS
 
@@ -22,7 +23,7 @@ const loader = (element) => {
 };
 //create new session
 document.addEventListener('DOMContentLoaded', function(event) {
-  fetch('https://chatbot.binga.network:8080/regenerate-session', {
+  fetch(`${apiUrl}/regenerate-session`, {
     method: 'GET',
     credentials: 'include'
   })
@@ -54,8 +55,6 @@ const typeMessage = (message, element) => {
     }, 50 * index);
   });
 };
-
-// how to create a random number in javascript
 
 // to show chat message by user or bot
 const chatMessage = (isBot, msg, uniqueId) => {
@@ -96,7 +95,7 @@ const handleSubmit = async (e) => {
 
   // get bot's response from server
 
-  const response = await fetch('https://chatbot.binga.network:8080/', {
+  const response = await fetch(`${apiUrl}/`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -136,7 +135,7 @@ form.addEventListener('keyup', (e) => {
 // Function to fetch and display console logs
 const fetchConsoleLogs = async () => {
   try {
-    const response = await fetch('https://chatbot.binga.network:8080/console-logs');
+    const response = await fetch(`${apiUrl}/console-logs`);
     if (response.ok) {
       const logs = await response.json();
 
